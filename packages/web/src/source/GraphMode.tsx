@@ -15,7 +15,7 @@ import { WorkingPlaceholder } from "../components/WorkingPlaceholder.js";
 import { Card } from "../ui/index.js";
 import { explainSelection, selectionActions } from "../floating/SelectionToolbar.js";
 import { toast } from "../floating/Toast.js";
-import { GRAPH_NODE_EVENT } from "../guide/actions.js";
+import { GRAPH_NODE_EVENT, type GraphNodeRequest } from "../guide/actions.js";
 import { inflightForAnchor, inflightLabel } from "../guide/inflight.js";
 import { useReview } from "../state/store.js";
 import { GraphReview, type Graph, type Place, type ThreadItem, type Threads } from "@unvibed/viewer";
@@ -163,15 +163,27 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
     return { ...graph, nodes: graph.nodes.map((n) => ({ ...n, code: n.code.map(rated) })) };
   }, [graph, risk]);
 
-  // a jump to a thread on a node's text (from the comments menu or a link) opens that node here
+  // A jump to a thread (from the comments menu or a link) opens its node here: the node itself for a thread on node or
+  // location text, and for a thread on code, the first node with a location on that side covering its lines.
   useEffect(() => {
     const onRequest = (e: Event): void => {
-      setSelected((e as CustomEvent<{ nodeId: string }>).detail.nodeId);
+      const request = (e as CustomEvent<GraphNodeRequest>).detail;
+      let nodeId: string | undefined;
+      if ("nodeId" in request) nodeId = request.nodeId;
+      else {
+        const { path, commit, start, end } = request.code;
+        const side = commit === head ? "RIGHT" : commit === base ? "LEFT" : undefined;
+        const covers = (l: Graph["nodes"][number]["code"][number]) =>
+          l.path === path && l.side === side && (l.start_line ?? l.line) <= start && end <= l.line;
+        nodeId = graph?.nodes.find((n) => n.code.some(covers))?.id;
+      }
+      if (!nodeId) return;
+      setSelected(nodeId);
       document.querySelector("[data-graph-section]")?.scrollIntoView({ block: "start" });
     };
     window.addEventListener(GRAPH_NODE_EVENT, onRequest);
     return () => window.removeEventListener(GRAPH_NODE_EVENT, onRequest);
-  }, []);
+  }, [graph, base, head]);
 
   const threads = useMemo((): Threads | undefined => {
     if (!graph || !snapshot) return undefined;

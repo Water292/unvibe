@@ -50,8 +50,18 @@ export const GRAPH_NODE_EVENT = "unvibe:graph-node";
  * their text have a host; that page is never shown, and a jump to it opens the node in the graph instead.
  */
 export function requestGraphNode(nodeId: string): void {
-  window.dispatchEvent(new CustomEvent<{ nodeId: string }>(GRAPH_NODE_EVENT, { detail: { nodeId } }));
+  window.dispatchEvent(new CustomEvent<GraphNodeRequest>(GRAPH_NODE_EVENT, { detail: { nodeId } }));
 }
+
+/**
+ * Ask the root page's graph to open the node showing some lines of code (prototype): a thread on code is kept by its
+ * file, lines and commit, not by a node, so the graph opens the first node with a location covering those lines.
+ */
+export function requestGraphCode(code: { path: string; commit: string; start: number; end: number }): void {
+  window.dispatchEvent(new CustomEvent<GraphNodeRequest>(GRAPH_NODE_EVENT, { detail: { code } }));
+}
+
+export type GraphNodeRequest = { nodeId: string } | { code: { path: string; commit: string; start: number; end: number } };
 
 async function resync(reviewId: string): Promise<void> {
   try {

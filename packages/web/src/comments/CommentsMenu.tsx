@@ -37,7 +37,7 @@ import { api, friendlyError } from "../api/client.js";
 import { Icon } from "../components/Icon.js";
 import { toast } from "../floating/Toast.js";
 import { anchorMatchesBlock } from "../guide/guideUtils.js";
-import { requestGraphNode, requestGuideBlock } from "../guide/actions.js";
+import { requestGraphCode, requestGraphNode, requestGuideBlock } from "../guide/actions.js";
 import { REVEAL_EVENT, ensureDiffVisible } from "../source/diff/revealSource.js";
 import { revealSource } from "../source/reveal.js";
 import { showGuidePane } from "../shell/panes.js";
@@ -460,6 +460,14 @@ export function CommentsMenu({ reviewId }: { reviewId: string }) {
         return;
       }
     }
+    // a thread on code (from the graph's code boxes): open the graph node showing those lines
+    if (host.kind === "code") {
+      showGuidePane();
+      navigate(`/review/${reviewId}`);
+      window.setTimeout(() => requestGraphCode({ path: host.path, commit: host.commit, start: host.line, end: host.endLine ?? host.line }), 120);
+      window.setTimeout(() => document.getElementById(thread.id)?.scrollIntoView({ block: "center" }), 500);
+      return;
+    }
     if (host.kind === "description") {
       window.dispatchEvent(
         new CustomEvent(REVEAL_EVENT, { detail: { ref: `desc:${host.paragraphId}` } }),
@@ -486,6 +494,7 @@ export function CommentsMenu({ reviewId }: { reviewId: string }) {
       showGuidePane();
       navigate(`/review/${reviewId}`);
       window.setTimeout(() => requestGraphNode(holder.card.id), 120);
+      window.setTimeout(() => document.getElementById(thread.id)?.scrollIntoView({ block: "center" }), 500);
       return;
     }
     const go = (): void => {

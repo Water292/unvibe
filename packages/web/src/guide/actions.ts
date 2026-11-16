@@ -57,11 +57,13 @@ export function requestGraphNode(nodeId: string): void {
  * Ask the root page's graph to open the node showing some lines of code (prototype): a thread on code is kept by its
  * file, lines and commit, not by a node, so the graph opens the first node with a location covering those lines.
  */
-export function requestGraphCode(code: { path: string; commit: string; start: number; end: number }): void {
+export function requestGraphCode(code: GraphCode): void {
   window.dispatchEvent(new CustomEvent<GraphNodeRequest>(GRAPH_NODE_EVENT, { detail: { code } }));
 }
 
-export type GraphNodeRequest = { nodeId: string } | { code: { path: string; commit: string; start: number; end: number } };
+/** Lines of code on one side of the change: the merge base's (LEFT) or the head's (RIGHT). */
+export type GraphCode = { path: string; side: "LEFT" | "RIGHT"; start: number; end: number };
+export type GraphNodeRequest = { nodeId: string } | { code: GraphCode };
 
 async function resync(reviewId: string): Promise<void> {
   try {

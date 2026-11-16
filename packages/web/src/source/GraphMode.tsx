@@ -171,8 +171,7 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
       let nodeId: string | undefined;
       if ("nodeId" in request) nodeId = request.nodeId;
       else {
-        const { path, commit, start, end } = request.code;
-        const side = commit === head ? "RIGHT" : commit === base ? "LEFT" : undefined;
+        const { path, side, start, end } = request.code;
         const covers = (l: Graph["nodes"][number]["code"][number]) =>
           l.path === path && l.side === side && (l.start_line ?? l.line) <= start && end <= l.line;
         nodeId = graph?.nodes.find((n) => n.code.some(covers))?.id;
@@ -183,7 +182,7 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
     };
     window.addEventListener(GRAPH_NODE_EVENT, onRequest);
     return () => window.removeEventListener(GRAPH_NODE_EVENT, onRequest);
-  }, [graph, base, head]);
+  }, [graph]);
 
   const threads = useMemo((): Threads | undefined => {
     if (!graph || !snapshot) return undefined;
@@ -192,7 +191,7 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
     const items: ThreadItem[] = [];
     for (const t of snapshot.annotations) {
       if (t.type !== "thread" && t.type !== "link") continue;
-      const at = threadPlace(t, cards, version);
+      const at = threadPlace(t, cards, version, (fileKey) => snapshot.files?.find((f) => f.fileKey === fileKey)?.path);
       if (!at) continue;
       items.push({
         id: t.id,

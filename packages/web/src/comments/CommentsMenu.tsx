@@ -37,7 +37,7 @@ import { api, friendlyError } from "../api/client.js";
 import { Icon } from "../components/Icon.js";
 import { toast } from "../floating/Toast.js";
 import { anchorMatchesBlock } from "../guide/guideUtils.js";
-import { requestGraphCode, requestGraphNode, requestGuideBlock } from "../guide/actions.js";
+import { requestGraphCode, requestGraphNode, requestGuideBlock, type GraphCode } from "../guide/actions.js";
 import { REVEAL_EVENT, ensureDiffVisible } from "../source/diff/revealSource.js";
 import { revealSource } from "../source/reveal.js";
 import { showGuidePane } from "../shell/panes.js";
@@ -431,12 +431,32 @@ export function CommentsMenu({ reviewId }: { reviewId: string }) {
     };
   }, [open ]);
 
-  const jump = (thread: Thread): void => {
+  /**
+   * Opens a thread where it was made, or for a thread on code, in the other view: `to` "graph" opens a diff thread's
+   * lines in the graph, and "diff" opens a graph code thread's lines in the diff (graph mode, prototype).
+   */
+  const jump = (thread: Thread, to?: "graph" | "diff"): void => {
     const snap = useReview.getState().snapshot;
     if (!snap) return;
     setOpen(false);
     api.updateComment(reviewId, thread.id, { open: true }).catch(() => {});
     const host = thread.anchor.host;
+    const inGraph = (code: GraphCode): void => {
+      showGuidePane();
+      navigate(`/review/${reviewId}`);
+      window.setTimeout(() => requestGraphCode(code), 120);
+      window.setTimeout(() => document.getElementById(thread.id)?.scrollIntoView({ block: "center" }), 500);
+    };
+    if (host.kind === "diff-line" && to === "graph") {
+      const path = snap.files.find((f) => f.fileKey === host.fileKey)?.path;
+      if (path) inGraph({ path, side: host.side ?? "RIGHT", start: host.line, end: host.endLine ?? host.line });
+      return;
+    }
+    if (host.kind === "code" && to === "diff") {
+      const file = snap.files.find((f) => f.path === host.path);
+      if (file) revealSource(`diff:${file.fileKey}:${host.line}`);
+      return;
+    }
     if (host.kind === "diff-line") {
       revealSource(`diff:${host.fileKey}:${host.line}`);
       window.setTimeout(() => {
@@ -462,10 +482,8 @@ export function CommentsMenu({ reviewId }: { reviewId: string }) {
     }
     // a thread on code (from the graph's code boxes): open the graph node showing those lines
     if (host.kind === "code") {
-      showGuidePane();
-      navigate(`/review/${reviewId}`);
-      window.setTimeout(() => requestGraphCode({ path: host.path, commit: host.commit, start: host.line, end: host.endLine ?? host.line }), 120);
-      window.setTimeout(() => document.getElementById(thread.id)?.scrollIntoView({ block: "center" }), 500);
+      const side = host.commit === snap.version?.mergeBaseSha ? "LEFT" : "RIGHT";
+      inGraph({ path: host.path, side, start: host.line, end: host.endLine ?? host.line });
       return;
     }
     if (host.kind === "description") {
@@ -589,6 +607,9 @@ export function CommentsMenu({ reviewId }: { reviewId: string }) {
   const localRow = (thread: Thread, withDraft: boolean): React.JSX.Element => {
     const meta = entryMeta(snapshot as ReviewSnapshot, thread);
     const go = (): void => jump(thread);
+    // a thread on code opens where it was made; this opens it in the other view
+    const kind = thread.anchor.host.kind;
+    const other = kind === "diff-line" ? "graph" : kind === "code" ? "diff" : undefined;
     const row = (
       <ListRow
         data-cjump={thread.id}
@@ -596,7 +617,24 @@ export function CommentsMenu({ reviewId }: { reviewId: string }) {
         {...rowKeys(go)}
         primary={excerpt(thread)}
         meta={meta.startsWith(":") ? <span className="mono">{meta}</span> : meta}
-        trailing={isAiSuggested(thread) ? <Badge tone="neutral">AI-suggested</Badge> : null}
+        trailing={
+          <>
+            {isAiSuggested(thread) ? <Badge tone="neutral">AI-suggested</Badge> : null}
+            {other ? (
+              <button
+                className="x"
+                type="button"
+                data-cjump-other={other}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  jump(thread, other);
+                }}
+              >
+                {other === "graph" ? "Graph" : "Diff"}
+              </button>
+            ) : null}
+          </>
+        }
       />
     );
     if (!withDraft) return <span key={thread.id}>{row}</span>;

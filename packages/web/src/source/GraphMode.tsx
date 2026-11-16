@@ -15,10 +15,15 @@ import { WorkingPlaceholder } from "../components/WorkingPlaceholder.js";
 import { Card } from "../ui/index.js";
 import { explainSelection, selectionActions } from "../floating/SelectionToolbar.js";
 import { toast } from "../floating/Toast.js";
+import { GRAPH_NODE_EVENT } from "../guide/actions.js";
 import { inflightForAnchor, inflightLabel } from "../guide/inflight.js";
 import { useReview } from "../state/store.js";
 import { GraphReview, type Graph, type Place, type ThreadItem, type Threads } from "@unvibed/viewer";
 import { placeToAnchor, threadPlace } from "./graphPlace.js";
+
+/** The opt-in risk reviewer: off, or on and rating (or waiting for a graph), rated, or failed; ratings by location id. */
+type Risk = NonNullable<Graph["nodes"][number]["code"][number]["risk"]>;
+type RiskState = { on: false } | { on: true; state: "waiting" | "rating" | "ready" | "failed"; error?: string; risks: Record<string, Risk> };
 
 type Pending = { id: string; at: Place; anchor: ActionAnchor; quote: string; kind: "ask" | "comment"; offsets?: { start: number; end: number } };
 
@@ -40,7 +45,7 @@ export function GraphSection({ reviewId }: { reviewId: string }) {
     ? { position: "fixed", inset: 0, zIndex: 1000, background: "var(--bg)" }
     : { position: "relative", height: "70vh" };
   return (
-    <Card as="section" variant="inset" className="plotlines" aria-label="Graph">
+    <Card as="section" variant="inset" className="plotlines" aria-label="Graph" data-graph-section>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <h2>Graph</h2>
         <button className="x" type="button" onClick={() => setFull(true)}>
@@ -75,6 +80,8 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
   const [writing, setWriting] = useState<"writing" | "failed">();
   const [attempt, setAttempt] = useState(0);
   const shownText = useRef("");
+  const [risk, setRisk] = useState<RiskState>();
+  const [riskTurn, setRiskTurn] = useState<{ on: boolean; n: number }>();
 
   // The graph's state at this head: asking starts the agent when there's no graph, or the head moved since it was
   // written. A graph that's ready, or still passes graph check while it's updated, is shown; until then, that it's
@@ -104,6 +111,7 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
           if (current && text && text !== shownText.current) {
             shownText.current = text;
             setGraph(JSON.parse(text) as Graph);
+            setGraphText(text);
           }
           setWriting(undefined);
         }
@@ -119,6 +127,51 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
       clearTimeout(timer);
     };
   }, [routes, head, attempt]);
+
+  // The risk reviewer's state for the shown graph, asked again every 2 seconds while it rates; turning it on or off
+  // (riskTurn) is sent first. Asked afresh whenever a new graph is shown, since that may need rating.
+  const [graphText, setGraphText] = useState("");
+  useEffect(() => {
+    let current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ask = async (first: boolean) => {
+      try {
+        const r = first && riskTurn
+          ? await fetch(`${routes}/risk`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ on: riskTurn.on }) })
+          : await fetch(`${routes}/risk`);
+        if (!r.ok) throw new Error(await r.text());
+        const next = (await r.json()) as RiskState;
+        if (!current) return;
+        // a new state only when it changed, so asking again doesn't redraw the graph
+        setRisk((was) => (JSON.stringify(was) === JSON.stringify(next) ? was : next));
+        if (next.on && (next.state === "rating" || next.state === "waiting")) timer = setTimeout(() => void ask(false), 2000);
+      } catch (e) {
+        if (current) toast(`Couldn't get the risk ratings: ${(e as Error).message}`);
+      }
+    };
+    void ask(true);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [routes, riskTurn, graphText]);
+
+  // the graph as shown: with the risk reviewer on, each rated location carries its rating
+  const shown = useMemo((): Graph | undefined => {
+    if (!graph || !risk?.on) return graph;
+    const rated = (l: Graph["nodes"][number]["code"][number]) => (risk.risks[l.id] ? { ...l, risk: risk.risks[l.id] } : l);
+    return { ...graph, nodes: graph.nodes.map((n) => ({ ...n, code: n.code.map(rated) })) };
+  }, [graph, risk]);
+
+  // a jump to a thread on a node's text (from the comments menu or a link) opens that node here
+  useEffect(() => {
+    const onRequest = (e: Event): void => {
+      setSelected((e as CustomEvent<{ nodeId: string }>).detail.nodeId);
+      document.querySelector("[data-graph-section]")?.scrollIntoView({ block: "start" });
+    };
+    window.addEventListener(GRAPH_NODE_EVENT, onRequest);
+    return () => window.removeEventListener(GRAPH_NODE_EVENT, onRequest);
+  }, []);
 
   const threads = useMemo((): Threads | undefined => {
     if (!graph || !snapshot) return undefined;
@@ -207,9 +260,32 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
         <WorkingPlaceholder label="Writing the graph…" />
       </div>
     );
-  if (!graph || !threads) return null;
+  if (!shown || !threads) return null;
+  const turnRisk = (on: boolean) => setRiskTurn((t) => ({ on, n: (t?.n ?? 0) + 1 }));
   return (
     <div style={{ position: "relative", height: "100%" }} data-graph-mode>
+      <div style={{ position: "absolute", left: 8, bottom: 8, zIndex: 10, display: "flex", gap: 8, alignItems: "center" }} data-risk-overlay>
+        {!risk?.on ? (
+          <button className="x" type="button" onClick={() => turnRisk(true)} title="An AI reviewer rates how risky each location's lines are">
+            Rate risk
+          </button>
+        ) : (
+          <>
+            <button className="x" type="button" onClick={() => turnRisk(false)}>
+              Hide risk
+            </button>
+            {risk.state === "rating" || risk.state === "waiting" ? <WorkingPlaceholder label="Rating risk…" /> : null}
+            {risk.state === "failed" ? (
+              <span className="hint">
+                {risk.error ?? "Rating risk failed."}{" "}
+                <button className="x" type="button" onClick={() => turnRisk(true)}>
+                  Try again
+                </button>
+              </span>
+            ) : null}
+          </>
+        )}
+      </div>
       <ErrorBoundary
         name="graph-mode"
         resetKey={`${reviewId}:${selected ?? ""}`}
@@ -223,7 +299,7 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
           />
         )}
       >
-        <GraphReview key={fitKey} graph={graph} host={{ routes }} threads={threads} selected={selected} onSelect={setSelected} />
+        <GraphReview key={fitKey} graph={shown} host={{ routes }} threads={threads} selected={selected} onSelect={setSelected} />
       </ErrorBoundary>
     </div>
   );

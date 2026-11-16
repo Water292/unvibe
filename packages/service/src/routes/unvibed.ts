@@ -21,6 +21,7 @@ import type { ServiceContext } from "./context.js";
 import type { AppContext } from "../app.js";
 import { fillBlanks, graphReport, reviewedToKeep, type At, type Keep, type Reviewed } from "./unvibed-writer.js";
 import { cwdForReview } from "./files.js";
+import { readRatings, riskPrompt, risksById, unrated, type RiskFile } from "./unvibed-risk.js";
 // unvibed's server code, from its checkout beside this one (prototype: no package yet)
 import { cutFor, EMPTY_CUT } from "../../../../../../unvibed-graph/src/hunks.ts";
 import { isRepoFile, show } from "../../../../../../unvibed-graph/src/git.ts";
@@ -234,6 +235,116 @@ export async function registerUnvibed(app: FastifyInstance, ctx: ServiceContext)
     if (shown) return job?.state === "failed" ? { state: "ready", error: job.error } : { state: job ? "updating" : "ready" };
     return job!.state === "failed" ? { state: "failed", error: job!.error } : { state: "writing" };
   };
+
+  // ---- risk: an opt-in AI reviewer's rating of each location, laid over the graph by the page ----
+
+  const riskFile = (id: string) => path.join(ctx.dataDir, "unvibed", `${id}.risk.json`);
+  const readRisk = (id: string): RiskFile =>
+    fs.existsSync(riskFile(id)) ? (JSON.parse(fs.readFileSync(riskFile(id), "utf8")) as RiskFile) : { on: false, byKey: {} };
+  const writeRisk = (id: string, risk: RiskFile) => {
+    fs.mkdirSync(path.dirname(riskFile(id)), { recursive: true });
+    fs.writeFileSync(riskFile(id), JSON.stringify(risk));
+  };
+
+  /** A review's risk-rating job: the graph it rates, and where it stands; one at a time per review. */
+  type RiskJob = { graph: Graph; state: "rating" | "failed"; error?: string; ratings: number; stop: AbortController };
+  const riskJobs = new Map<string, RiskJob>();
+
+  full.mcp.setRiskWriter(async (id, input) => {
+    const job = riskJobs.get(id);
+    if (!job || job.state !== "rating") return "No risk rating is under way for this review.";
+    const { ratings, problems } = readRatings(input, job.graph);
+    const risk = readRisk(id);
+    writeRisk(id, { ...risk, byKey: { ...risk.byKey, ...ratings } });
+    job.ratings += Object.keys(ratings).length;
+    const left = unrated(job.graph, readRisk(id).byKey);
+    return [
+      `Recorded ${Object.keys(ratings).length} rating(s).`,
+      ...problems,
+      left.length ? `Still to rate: ${left.join(", ")}` : "Every location is rated; finish your turn.",
+    ].join("\n");
+  });
+
+  /** Rates every location of graph that has no rating yet, until none is left or the budget runs out. */
+  const runRisk = async (id: string, job: RiskJob, at: At) => {
+    const signal = AbortSignal.any([job.stop.signal, AbortSignal.timeout(GRAPH_BUDGET_MS)]);
+    try {
+      const session = await full.pipeline.graphSession(id, "risk");
+      try {
+        let text = riskPrompt(job.graph, at, unrated(job.graph, readRisk(id).byKey));
+        // turns in a row that ended without a rating; the second, after a reminder, ends the job
+        let idle = 0;
+        for (;;) {
+          const ratings = job.ratings;
+          await session.prompt(text, signal);
+          await new Promise((r) => setImmediate(r));
+          const left = unrated(job.graph, readRisk(id).byKey);
+          if (!left.length) {
+            riskJobs.delete(id);
+            return;
+          }
+          signal.throwIfAborted();
+          idle = job.ratings === ratings ? idle + 1 : 0;
+          if (idle >= 2) throw new Error("The agent ended its turns without rating every location, even when reminded to.");
+          text = `These locations aren't rated yet. Rate them with rate_risk: ${left.join(", ")}`;
+        }
+      } finally {
+        await session.close();
+      }
+    } catch (err) {
+      if (riskJobs.get(id) !== job) return; // replaced by a job for a newer graph
+      job.state = "failed";
+      job.error = signal.aborted && !job.stop.signal.aborted ? `Rating risk took longer than its ${Math.round(GRAPH_BUDGET_MS / 60_000)} minutes.` : (err as Error).message;
+    }
+  };
+
+  /**
+   * Where risk stands for a review's shown graph: off, rated, or being rated (or failed to be). While it's on, starts a
+   * job for the shown graph's unrated locations when none is running; retry starts one again after a failure.
+   */
+  const riskState = (id: string, at: At, retry: boolean) => {
+    const risk = readRisk(id);
+    const have = stored(id);
+    const shown = have && passes(have.graph, at) ? have.graph : undefined;
+    let job = riskJobs.get(id);
+    if (job && (!risk.on || JSON.stringify(job.graph) !== JSON.stringify(shown))) {
+      job.stop.abort();
+      riskJobs.delete(id);
+      job = undefined;
+    }
+    if (job?.state === "failed" && retry) {
+      riskJobs.delete(id);
+      job = undefined;
+    }
+    if (!risk.on) return { on: false };
+    if (!shown) return { on: true, state: "waiting", risks: {} };
+    if (!job && unrated(shown, risk.byKey).length) {
+      job = { graph: shown, state: "rating", ratings: 0, stop: new AbortController() };
+      riskJobs.set(id, job);
+      void runRisk(id, job, at);
+    }
+    const risks = risksById(shown, readRisk(id).byKey);
+    if (!job) return { on: true, state: "ready", risks };
+    return job.state === "failed" ? { on: true, state: "failed", error: job.error, risks } : { on: true, state: "rating", risks };
+  };
+
+  app.get("/api/reviews/:id/unvibed/risk", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const at = where(id);
+    if (!at) return reply.code(409).send({ error: "review not ready" });
+    return riskState(id, at, false);
+  });
+
+  // turns the risk reviewer on (starting it, or starting it again after a failure) or off; ratings are kept either way
+  app.post("/api/reviews/:id/unvibed/risk", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const at = where(id);
+    if (!at) return reply.code(409).send({ error: "review not ready" });
+    const body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) as { on?: unknown };
+    if (typeof body?.on !== "boolean") return reply.code(400).send({ error: "send { on: true } or { on: false }" });
+    writeRisk(id, { ...readRisk(id), on: body.on });
+    return riskState(id, at, true);
+  });
 
   app.post("/api/reviews/:id/unvibed/graph", async (req, reply) => {
     const { id } = req.params as { id: string };

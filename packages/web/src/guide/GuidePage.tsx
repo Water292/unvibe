@@ -11,7 +11,7 @@
  * page, expands its card, scrolls and highlights it.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router";
 import { isDocumentReview } from "@unvibe/shared";
 import { api, friendlyError } from "../api/client.js";
 import { ErrorBoundary, InlineFallback } from "../components/ErrorBoundary.js";
@@ -286,6 +286,8 @@ export function GuidePage({ reviewId }: { reviewId: string }) {
   }
 
   const current = pageId === null ? pages.find((p) => p.kind === "root") ?? pages[0] : lookupPage(pageId);
+  // the graph's hidden page (prototype) only hosts threads on node text; the graph itself is on the root page
+  if (current?.kind === "graph") return <Navigate to={`/review/${reviewId}`} replace />;
   // Reviews whose guide is not built yet have no pages; the version
   // selector lives in the review bar, so it still switches here.
   if (!current && pageId === null) {

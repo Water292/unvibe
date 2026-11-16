@@ -32,6 +32,8 @@ class GraphAgent extends FakeAgentRunner {
   turn: (text: string, writeGraph: (graph: unknown) => Promise<string>) => Promise<void> = async () => {};
   graphPrompts: string[] = [];
   replies: string[] = [];
+  riskTurn: (text: string, rateRisk: (risks: unknown) => Promise<string>) => Promise<void> = async () => {};
+  riskPrompts: string[] = [];
 
   override async start(opts: Parameters<FakeAgentRunner["start"]>[0]): Promise<Session> {
     const session = await super.start(opts);
@@ -48,6 +50,18 @@ class GraphAgent extends FakeAgentRunner {
       await client.connect(new StreamableHTTPClientTransport(new URL(`${this.origin}${new URL(url).pathname}`)));
       await this.turn(text, async (graph) => {
         const res = (await client.callTool({ name: "write_graph", arguments: { graph } })) as { content: { text: string }[] };
+        const reply = res.content.map((c) => c.text).join("\n");
+        this.replies.push(reply);
+        return reply;
+      });
+      await client.close();
+    }
+    if (url && (text.includes("# Rate the risk") || text.includes("aren't rated yet"))) {
+      this.riskPrompts.push(text);
+      const client = new Client({ name: "test", version: "0" });
+      await client.connect(new StreamableHTTPClientTransport(new URL(`${this.origin}${new URL(url).pathname}`)));
+      await this.riskTurn(text, async (risks) => {
+        const res = (await client.callTool({ name: "rate_risk", arguments: { risks } })) as { content: { text: string }[] };
         const reply = res.content.map((c) => c.text).join("\n");
         this.replies.push(reply);
         return reply;
@@ -221,5 +235,52 @@ describe("graph mode writes its own graph", () => {
     await waitFor("the retried graph", async () => (await state()).state === "ready");
     const served = (await app.inject({ method: "GET", url: `${routes()}/graph.json`, headers: authed })).json() as Graph;
     expect(served.nodes[0]!.code[0]).toMatchObject({ line: 4, hash: hashRows(["-old", "+NEWER"]) });
+  });
+});
+
+describe("the risk reviewer is opt-in and rates the shown graph's locations", () => {
+  const risk = async () => (await app.inject({ method: "GET", url: `${routes()}/risk`, headers: authed })).json() as { on: boolean; state?: string; risks?: Record<string, unknown> };
+  const turnRisk = async (on: boolean) => (await app.inject({ method: "POST", url: `${routes()}/risk`, headers: authed, payload: { on } })).json();
+
+  it("is off until turned on; then a risk-rating session rates every location, a wrong id is sent back, and the ratings lie over the graph", async () => {
+    expect(await risk()).toEqual({ on: false });
+    expect(agents.riskPrompts).toEqual([]);
+
+    let turns = 0;
+    agents.riskTurn = async (_text, rateRisk) => {
+      turns++;
+      // first a wrong id only, then the graph's location
+      await rateRisk(turns === 1 ? [{ location: "nope", level: "high", reason: "?" }] : [{ location: LOCATION, level: "high", reason: "A missed caller still reads old." }]);
+    };
+    expect(await turnRisk(true)).toEqual({ on: true, state: "rating", risks: {} });
+    await waitFor("the ratings", async () => (await risk()).state === "ready");
+
+    const [first, reminded] = agents.riskPrompts;
+    expect(first).toContain("# Rate the risk");
+    expect(first).toContain(`Locations to rate: ${LOCATION}`);
+    expect(reminded).toContain(`aren't rated yet. Rate them with rate_risk: ${LOCATION}`);
+    expect(agents.replies.some((r) => r.includes("nope is not a location id"))).toBe(true);
+    expect((await risk()).risks).toEqual({ [LOCATION]: { level: "high", reason: "A missed caller still reads old." } });
+    // the graph itself carries no risk
+    const served = (await app.inject({ method: "GET", url: `${routes()}/graph.json`, headers: authed })).json() as Graph;
+    expect(served.nodes[0]!.code[0]!.risk).toBeUndefined();
+  });
+
+  it("turned off, it shows nothing; turned on again, kept ratings come back without a new session", async () => {
+    const before = agents.riskPrompts.length;
+    expect(await turnRisk(false)).toEqual({ on: false });
+    expect(await risk()).toEqual({ on: false });
+    expect(await turnRisk(true)).toMatchObject({ on: true, state: "ready", risks: { [LOCATION]: { level: "high" } } });
+    expect(agents.riskPrompts.length).toBe(before);
+  });
+
+  it("rate_risk is refused to a session without the risk role", async () => {
+    const issued = ctx.mcp.issueSession(reviewId, "not-risk", "graph");
+    const client = new Client({ name: "test", version: "0" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${agents.origin}${issued.path}`)));
+    const res = (await client.callTool({ name: "rate_risk", arguments: { risks: [] } })) as { isError?: boolean; content: { text: string }[] };
+    await client.close();
+    expect(res.isError).toBe(true);
+    expect(res.content[0]!.text).toContain("only available to a risk-rating session");
   });
 });

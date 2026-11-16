@@ -35,7 +35,7 @@ import { findReplyIndexBySeq, parseId } from "@unvibe/shared";
 import type { CommandRunner } from "../exec/runner.js";
 import type { McpReviewData, PinRecord, ReviewReader } from "./read.js";
 import { readCodeSlice } from "./read.js";
-import { GRAPH_TOOL, READER_TOOL, toolsForRole } from "./tools.js";
+import { GRAPH_TOOL, READER_TOOL, RISK_TOOL, toolsForRole } from "./tools.js";
 import { repoContainingSha } from "../document/resolve.js";
 
 export const MCP_SERVICE_NAME = "unvibe";
@@ -47,8 +47,9 @@ export const MCP_SERVICE_VERSION = "0.0.20";
  * - `reader`: the main reader session (extra `pin_context` tool).
  * - `session`: every other conversation.
  * - `graph`: a graph-mode session writing the review's graph (extra `write_graph` tool; prototype).
+ * - `risk`: a graph-mode session rating the risk of the graph's locations (extra `rate_risk` tool; prototype).
  */
-export type McpRole = "reader" | "session" | "graph";
+export type McpRole = "reader" | "session" | "graph" | "risk";
 
 export interface IssuedSession {
   secret: string;
@@ -68,6 +69,9 @@ export interface McpRegistryOptions {
 
 /** Graph mode (prototype): saves a review's graph draft and returns graph check's report on it. */
 export type GraphWriter = (reviewId: string, graph: unknown) => Promise<string>;
+
+/** Graph mode (prototype): records risk ratings of a review's graph locations and says which are still unrated. */
+export type RiskWriter = (reviewId: string, risks: unknown) => Promise<string>;
 
 /** One client connection on a secret: its own server + stateful transport. */
 interface McpConnection {
@@ -111,10 +115,16 @@ export class McpRegistry {
   constructor(private readonly opts: McpRegistryOptions) {}
 
   private graphWriter: GraphWriter | undefined;
+  private riskWriter: RiskWriter | undefined;
 
   /** Graph mode (prototype): what write_graph calls; set once graph mode's routes are up. */
   setGraphWriter(writer: GraphWriter): void {
     this.graphWriter = writer;
+  }
+
+  /** Graph mode (prototype): what rate_risk calls; set once graph mode's routes are up. */
+  setRiskWriter(writer: RiskWriter): void {
+    this.riskWriter = writer;
   }
 
   /** Issue a per-session secret; connections are created per client. */
@@ -419,6 +429,11 @@ export class McpRegistry {
           return errorResult("write_graph is only available to a graph-writing session");
         }
         return textResult(await this.graphWriter(state.reviewId, args["graph"]));
+      case RISK_TOOL.name:
+        if (state.role !== "risk" || !this.riskWriter) {
+          return errorResult("rate_risk is only available to a risk-rating session");
+        }
+        return textResult(await this.riskWriter(state.reviewId, args["risks"]));
       default:
         return errorResult(`unknown tool: ${name}`);
     }

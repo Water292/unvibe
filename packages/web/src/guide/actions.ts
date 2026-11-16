@@ -43,6 +43,16 @@ export function requestGuideBlock(cardId: string, blockId: string): void {
   );
 }
 
+export const GRAPH_NODE_EVENT = "unvibe:graph-node";
+
+/**
+ * Ask the root page's graph to open a node (prototype). The graph's nodes are also a hidden guide page, so threads on
+ * their text have a host; that page is never shown, and a jump to it opens the node in the graph instead.
+ */
+export function requestGraphNode(nodeId: string): void {
+  window.dispatchEvent(new CustomEvent<{ nodeId: string }>(GRAPH_NODE_EVENT, { detail: { nodeId } }));
+}
+
 async function resync(reviewId: string): Promise<void> {
   try {
     useReview.getState().setSnapshot(await api.review(reviewId));
@@ -65,6 +75,11 @@ export function scrollToBlock(
   if (!snap) return;
   const page = snap.pages.find((p) => p.cards.some((c) => c.id === cardId));
   if (!page) return;
+  if (page.kind === "graph") {
+    if (currentPageId !== "root") navigate(null);
+    window.setTimeout(() => requestGraphNode(cardId), 120);
+    return;
+  }
   const go = (): void => {
     optimistic((s) => ({
       ...s,

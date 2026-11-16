@@ -37,7 +37,7 @@ import { api, friendlyError } from "../api/client.js";
 import { Icon } from "../components/Icon.js";
 import { toast } from "../floating/Toast.js";
 import { anchorMatchesBlock } from "../guide/guideUtils.js";
-import { requestGuideBlock } from "../guide/actions.js";
+import { requestGraphNode, requestGuideBlock } from "../guide/actions.js";
 import { REVEAL_EVENT, ensureDiffVisible } from "../source/diff/revealSource.js";
 import { revealSource } from "../source/reveal.js";
 import { showGuidePane } from "../shell/panes.js";
@@ -482,6 +482,12 @@ export function CommentsMenu({ reviewId }: { reviewId: string }) {
         card.blocks.some((b) => anchorMatchesBlock(host.blockId, card.id, (b as { id: string }).id)),
       );
     if (!holder) return;
+    if (holder.page.kind === "graph") {
+      showGuidePane();
+      navigate(`/review/${reviewId}`);
+      window.setTimeout(() => requestGraphNode(holder.card.id), 120);
+      return;
+    }
     const go = (): void => {
       showGuidePane();
       if (holder.card.collapsed) {

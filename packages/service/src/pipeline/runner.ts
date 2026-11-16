@@ -3393,7 +3393,7 @@ export class Pipeline {
    * the review's access, reads the base context first as every base session does, and gets the `graph` MCP role, so
    * write_graph is its only addition. A fork can't take it: forks share their base session's MCP secret and role.
    */
-  async graphSession(reviewId: string): Promise<{ prompt(text: string, signal?: AbortSignal): Promise<string>; close(): Promise<void> }> {
+  async graphSession(reviewId: string, mcpRole: "graph" | "risk" = "graph"): Promise<{ prompt(text: string, signal?: AbortSignal): Promise<string>; close(): Promise<void> }> {
     if (isNoneRunner(this.opts.runner)) throw new NoAgentError();
     const snapshot = this.opts.reviews.getSnapshot(reviewId);
     if (!snapshot) throw new Error(`unknown review ${reviewId}`);
@@ -3401,7 +3401,7 @@ export class Pipeline {
     const lib = loadTemplatesDirSync(this.promptsDir);
     const instructions = this.instructionsFor(lib, settings);
     const role = this.roleFor(settings);
-    const mcp = this.opts.mcp.issueSession(reviewId, `graph-${Date.now()}`, "graph");
+    const mcp = this.opts.mcp.issueSession(reviewId, `${mcpRole}-${Date.now()}`, mcpRole);
     const runner = this.opts.runner;
     const session = await runner.start({
       ...roleFields(role),

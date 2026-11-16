@@ -12,7 +12,8 @@ export interface McpToolDef {
   description: string;
   inputSchema: {
     type: "object";
-    properties: Record<string, { type: string; description: string }>;
+    // items: an array property's item schema (rate_risk's list of ratings; prototype)
+    properties: Record<string, { type: string; description: string; items?: unknown }>;
     required: string[];
     additionalProperties: false;
   };
@@ -154,10 +155,43 @@ export const GRAPH_TOOL: McpToolDef = {
   },
 };
 
+/**
+ * Graph mode (prototype): the extra tool only a risk-rating session gets. It records how risky locations' lines are, so
+ * the graph can show them; the graph itself is left as it is.
+ */
+export const RISK_TOOL: McpToolDef = {
+  name: "rate_risk",
+  description:
+    "Record how risky the lines of some of the graph's locations are (risk-rating session only), and get back which " +
+    "locations are still unrated. Call it as often as you like; a later rating of a location replaces an earlier one.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      risks: {
+        type: "array",
+        description: "One rating per location.",
+        items: {
+          type: "object",
+          properties: {
+            location: { type: "string", description: "The location's id, from the graph." },
+            level: { type: "string", enum: ["low", "medium", "high"] },
+            reason: { type: "string", description: "One or two sentences: what could go wrong in these lines, or why nothing much can." },
+          },
+          required: ["location", "level", "reason"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["risks"],
+    additionalProperties: false,
+  },
+};
+
 /** Full ordered surface for a role; the golden test pins this JSON. */
 export function toolsForRole(role: string): McpToolDef[] {
   if (role === "reader") return [...COMMON_TOOLS, READER_TOOL];
   if (role === "graph") return [...COMMON_TOOLS, GRAPH_TOOL];
+  if (role === "risk") return [...COMMON_TOOLS, RISK_TOOL];
   return [...COMMON_TOOLS];
 }
 

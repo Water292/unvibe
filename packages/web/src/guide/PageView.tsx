@@ -544,7 +544,7 @@ export function PageView({ reviewId, page, lookupPage, onOpenPage, onJumpToCard 
         ) : null}
       </UiCard>
       {page.kind === "root" ? <Plotlines reviewId={reviewId} /> : null}
-      {page.kind === "root" && new URLSearchParams(window.location.search).has("graph") ? <GraphSection reviewId={reviewId} /> : null}
+      {page.kind === "root" ? <GraphSection reviewId={reviewId} /> : null}
       {page.cards.map(renderCard)}
     </div>
   );

@@ -155,9 +155,7 @@ export function AppShell({ reviewId }: { reviewId: string }) {
   // overlay only covers the guide when both panes are on in a narrow
   // window.
   const rightClass = "col" + (!sourceVisible ? " hide" : docked || !guideOpen ? "" : " overlay");
-  // graph mode (prototype): the graph is a section of the guide, so there's no source pane and the guide always shows
-  const graphMode = new URLSearchParams(window.location.search).has("graph");
-  const guideClass = "col" + (guideOpen || graphMode ? "" : " hide");
+  const guideClass = "col" + (guideOpen ? "" : " hide");
 
   return (
     <div className="app with-reviewbar">
@@ -171,7 +169,7 @@ export function AppShell({ reviewId }: { reviewId: string }) {
       <DemoBanner reviewId={reviewId} />
       <div
         className="cols"
-        style={{ gridTemplateColumns: docked && !graphMode ? `minmax(0, 1fr) 6px ${paneWidth}px` : "minmax(0, 1fr)" }}
+        style={{ gridTemplateColumns: docked ? `minmax(0, 1fr) 6px ${paneWidth}px` : "minmax(0, 1fr)" }}
       >
         <main className={guideClass} id="page">
           <GuidePage reviewId={reviewId} />
@@ -182,17 +180,15 @@ export function AppShell({ reviewId }: { reviewId: string }) {
           aria-orientation="vertical"
           aria-label="Resize source pane"
           tabIndex={0}
-          hidden={!docked || graphMode}
+          hidden={!docked}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onKeyDown={onHandleKey}
         />
-        {graphMode ? null : (
-          <section className={rightClass} id="right" aria-label="Description, files and diff">
-            <SourcePane reviewId={reviewId} tab={tab} onTab={setTab} />
-          </section>
-        )}
+        <section className={rightClass} id="right" aria-label="Description, files and diff">
+          <SourcePane reviewId={reviewId} tab={tab} onTab={setTab} />
+        </section>
       </div>
     </div>
   );

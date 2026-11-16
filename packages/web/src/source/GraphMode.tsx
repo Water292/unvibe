@@ -1,5 +1,5 @@
 /**
- * Graph mode (prototype): unvibed's graph in place of the source pane, with
+ * Graph mode (prototype): unvibed's graph as a section of the guide, under Plotlines, with
  * Unvibe's threads on it. unvibed draws the graph, text, code, selection
  * buttons and quote marks; this file gives it Unvibe's threads (list), the
  * toolbar's actions, ThreadView / NewThreadComposer (render) and reopen /

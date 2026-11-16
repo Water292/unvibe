@@ -200,7 +200,7 @@ export interface FileState {
   folded: boolean;
 }
 
-export type PageKind = "root" | "concept" | "finding" | "opened-expansion";
+export type PageKind = "root" | "concept" | "finding" | "opened-expansion" | "graph";
 
 /** A guide page: root, concept, finding, or opened expansion. */
 export interface Page {

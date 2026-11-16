@@ -14,6 +14,7 @@
  * is never overwritten by a full-width state, so restoring two panes
  * restores it.
  */
+import { GraphMode } from "../source/GraphMode.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GuidePage } from "../guide/GuidePage.js";
 import { REVEAL_EVENT } from "../source/diff/revealSource.js";
@@ -187,7 +188,11 @@ export function AppShell({ reviewId }: { reviewId: string }) {
           onKeyDown={onHandleKey}
         />
         <section className={rightClass} id="right" aria-label="Description, files and diff">
-          <SourcePane reviewId={reviewId} tab={tab} onTab={setTab} />
+          {new URLSearchParams(window.location.search).has("graph") ? (
+            <GraphMode reviewId={reviewId} />
+          ) : (
+            <SourcePane reviewId={reviewId} tab={tab} onTab={setTab} />
+          )}
         </section>
       </div>
     </div>

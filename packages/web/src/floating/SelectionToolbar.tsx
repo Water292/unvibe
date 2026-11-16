@@ -42,7 +42,7 @@
  * The host-resolution + line-id helpers are re-exported for the
  * interaction agent's Explain/expansion cards (`resolveSelectionHost`).
  */
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import type { ActionAnchor, ReviewSnapshot } from "@unvibe/shared";
 import { githubFileUrl } from "@unvibe/shared";
@@ -85,6 +85,45 @@ export interface NewThreadRequest {
    * anchor); the service stores them on the anchor for offset placement.
    */
   offsets?: { start: number; end: number };
+}
+
+/** The toolbar's actions on a selection, in order; graph mode offers the same ones. */
+export function selectionActions(opts: { revealed?: boolean }): { id: "explain" | "ask" | "comment"; label: string }[] {
+  return [
+    { id: "explain", label: "Explain" },
+    { id: "ask", label: "Ask…" },
+    ...(opts.revealed ? [] : [{ id: "comment" as const, label: "Comment" }]),
+  ];
+}
+
+/** Explain a selection: the toolbar's Explain request, with its error toasts. */
+export function explainSelection(
+  reviewId: string,
+  req: { quote: string; anchor: ActionAnchor; offsets?: { start: number; end: number }; threadId?: string; sourceReplyId?: string; personaId?: string },
+): void {
+  performAction(
+    reviewId,
+    {
+      kind: "explain",
+      quote: req.quote,
+      ...(req.threadId ? { threadId: req.threadId } : { anchor: req.anchor }),
+      ...(req.sourceReplyId ? { sourceReplyId: req.sourceReplyId } : {}),
+      ...(req.offsets && !req.threadId ? { offsets: req.offsets } : {}),
+      ...(!req.threadId && req.personaId ? { personaId: req.personaId } : {}),
+    } as import("@unvibe/shared").ReviewAction,
+    { toast: false },
+  )
+    .then((res) => {
+      if (!res.accepted) toast("Not available with mock data");
+    })
+    .catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (apiErrorCode(err) === "no-agent" || /no agent configured/i.test(msg)) {
+        toast(NO_AGENT_COPY);
+      } else {
+        toast(`Couldn't explain: ${friendlyError(err)}`);
+      }
+    });
 }
 
 /** Ask a host to open a pending thread composer for this selection. */
@@ -160,7 +199,7 @@ export function selectionScopeElement(el: HTMLElement): Element | null {
 export function inSelectionScope(el: Element): boolean {
   return (
     el.closest(
-      "#page, #right .desc:not(.editing), #right table.diff, #right .dhunk, #right .ghfile, #right .codefile",
+      "#page, #right .desc:not(.editing), #right table.diff, #right .dhunk, #right .ghfile, #right .codefile, .ithread",
     ) !== null
   );
 }
@@ -841,31 +880,14 @@ export function SelectionToolbar() {
     // The in-flight entry (keyed by anchor) is set synchronously, so a
     // placeholder shows where the explanation will land before the
     // request returns. Inside a thread the answer appends there (#273).
-    performAction(
-      reviewId,
-      {
-        kind: "explain",
-        quote: current.quote,
-        ...(current.threadId ? { threadId: current.threadId } : { anchor: current.anchor }),
-        ...(current.sourceReplyId ? { sourceReplyId: current.sourceReplyId } : {}),
-        ...(current.offsets && !current.threadId ? { offsets: current.offsets } : {}),
-        // Issue #349 step 2: a selection on a persona's version is
-        // explained by that persona (threads already know theirs).
-        ...(!current.threadId && current.personaId ? { personaId: current.personaId } : {}),
-      } as import("@unvibe/shared").ReviewAction,
-      { toast: false },
-    )
-      .then((res) => {
-        if (!res.accepted) toast("Not available with mock data");
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (apiErrorCode(err) === "no-agent" || /no agent configured/i.test(msg)) {
-          toast(NO_AGENT_COPY);
-        } else {
-          toast(`Couldn't explain: ${friendlyError(err)}`);
-        }
-      });
+    explainSelection(reviewId, {
+      quote: current.quote,
+      anchor: current.anchor,
+      ...(current.offsets ? { offsets: current.offsets } : {}),
+      ...(current.threadId ? { threadId: current.threadId } : {}),
+      ...(current.sourceReplyId ? { sourceReplyId: current.sourceReplyId } : {}),
+      ...(current.personaId ? { personaId: current.personaId } : {}),
+    });
   };
 
   const onAskNote = (kind: "comment" | "ask"): void => {
@@ -932,18 +954,18 @@ export function SelectionToolbar() {
         <span className="sel-note">{notice}</span>
       ) : (
         <>
-          <button type="button" data-act="explain" onClick={onExplain}>
-            Explain
-          </button>
-          <span className="sep" />
-          <button type="button" data-act="ask" onClick={() => onAskNote("ask")}>
-            Ask…
-          </button>
-          {pending?.revealed ? null : (
-            <button type="button" data-act="note" onClick={() => onAskNote("comment")}>
-              Comment
-            </button>
-          )}
+          {selectionActions({ revealed: pending?.revealed === true }).map((a, n) => (
+            <Fragment key={a.id}>
+              {n === 1 ? <span className="sep" /> : null}
+              <button
+                type="button"
+                data-act={a.id === "comment" ? "note" : a.id}
+                onClick={a.id === "explain" ? onExplain : () => onAskNote(a.id === "ask" ? "ask" : "comment")}
+              >
+                {a.label}
+              </button>
+            </Fragment>
+          ))}
           {pending?.diffRange ? (
             <GithubAction snapshot={snapshot} repo={githubRepo} diffRange={pending.diffRange} onOpen={dismiss} />
           ) : null}

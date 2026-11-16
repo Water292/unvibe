@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { registerUnvibed } from "./unvibed.js";
 import { registerMcp } from "../mcp/index.js";
 import type { ServiceContext } from "./context.js";
 import { registerComments } from "./comments.js";
@@ -51,6 +52,7 @@ export async function registerRoutes(
   await registerFileSlices(app, ctx);
   await registerOutline(app, ctx);
   await registerComments(app, ctx);
+  await registerUnvibed(app, ctx);
   await registerContributions(app, full as unknown as ServiceContext);
   await registerSharedContext(app, full as unknown as ServiceContext);
   await registerDescription(app, ctx);

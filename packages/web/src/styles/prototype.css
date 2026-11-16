@@ -392,6 +392,9 @@ code { font-family: var(--mono); font-size: .86em; }
    banner when present (issue #341) — three rows; the empty banner row
    collapses to zero on non-demo reviews. */
 .app.with-reviewbar { grid-template-rows: auto auto minmax(0, 1fr); }
+/* Without a banner the columns are the second child, so they need the
+   1fr row themselves (a short pane, like graph mode, otherwise sizes the row). */
+.app.with-reviewbar:not(:has(.demo-banner)) { grid-template-rows: auto minmax(0, 1fr); }
 .demo-banner { min-height: 0; }
 /* The narrow-window overlay floats below the review bar (and the demo
    banner when one is showing). */

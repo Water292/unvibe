@@ -21,6 +21,7 @@ import { CardView } from "./CardView.js";
 import { contentsModel, plotlineReviewedState } from "./guideUtils.js";
 import { SinceSection } from "./SinceSection.js";
 import { Badge, Card as UiCard, ListRow } from "../ui/index.js";
+import { GraphSection } from "../source/GraphMode.js";
 import { InlineCode, stripCodeSpans } from "../components/inlineCode.js";
 import { inflightLabel } from "./inflight.js";
 import { useReviewIdentity } from "../shell/reviewIdentity.js";
@@ -543,6 +544,7 @@ export function PageView({ reviewId, page, lookupPage, onOpenPage, onJumpToCard 
         ) : null}
       </UiCard>
       {page.kind === "root" ? <Plotlines reviewId={reviewId} /> : null}
+      {page.kind === "root" && new URLSearchParams(window.location.search).has("graph") ? <GraphSection reviewId={reviewId} /> : null}
       {page.cards.map(renderCard)}
     </div>
   );

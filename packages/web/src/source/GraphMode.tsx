@@ -12,6 +12,7 @@ import { NewThreadComposer } from "../comments/NewThreadComposer.js";
 import { ThreadView } from "../comments/ThreadView.js";
 import { ErrorBoundary, InlineFallback } from "../components/ErrorBoundary.js";
 import { WorkingPlaceholder } from "../components/WorkingPlaceholder.js";
+import { Card } from "../ui/index.js";
 import { explainSelection, selectionActions } from "../floating/SelectionToolbar.js";
 import { toast } from "../floating/Toast.js";
 import { inflightForAnchor, inflightLabel } from "../guide/inflight.js";
@@ -21,7 +22,45 @@ import { placeToAnchor, threadPlace } from "./graphPlace.js";
 
 type Pending = { id: string; at: Place; anchor: ActionAnchor; quote: string; kind: "ask" | "comment"; offsets?: { start: number; end: number } };
 
-export function GraphMode({ reviewId }: { reviewId: string }) {
+/**
+ * Graph mode's section of the guide, beside Plotlines: the graph across the guide's width, and a full-screen mode that
+ * covers the window, for reviewing the code diffs. Esc, or the button, leaves full screen.
+ */
+export function GraphSection({ reviewId }: { reviewId: string }) {
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFull(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [full]);
+  const box: React.CSSProperties = full
+    ? { position: "fixed", inset: 0, zIndex: 1000, background: "var(--bg)" }
+    : { position: "relative", height: "70vh" };
+  return (
+    <Card as="section" variant="inset" className="plotlines" aria-label="Graph">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h2>Graph</h2>
+        <button className="x" type="button" onClick={() => setFull(true)}>
+          Full screen
+        </button>
+      </div>
+      <div style={box} data-graph-full={full || undefined}>
+        {full && (
+          <button className="x" type="button" style={{ position: "absolute", top: 8, left: 8, zIndex: 10 }} onClick={() => setFull(false)}>
+            Exit full screen
+          </button>
+        )}
+        {/* the canvas fits itself when drawn, so it's drawn afresh at each size */}
+        <GraphMode reviewId={reviewId} fitKey={full ? "full" : "inline"} />
+      </div>
+    </Card>
+  );
+}
+
+export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: string }) {
   const snapshot = useReview((s) => s.snapshot);
   const inflight = useReview((s) => s.inflight);
   const [graph, setGraph] = useState<Graph>();
@@ -184,7 +223,7 @@ export function GraphMode({ reviewId }: { reviewId: string }) {
           />
         )}
       >
-        <GraphReview graph={graph} host={{ routes }} threads={threads} selected={selected} onSelect={setSelected} />
+        <GraphReview key={fitKey} graph={graph} host={{ routes }} threads={threads} selected={selected} onSelect={setSelected} />
       </ErrorBoundary>
     </div>
   );

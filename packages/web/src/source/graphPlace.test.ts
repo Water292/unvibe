@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Thread } from "@unvibe/shared";
-import { placeToAnchor, threadPlace } from "./graphPlace.js";
+import { coversCode, diffShowsLine, placeToAnchor, threadPlace } from "./graphPlace.js";
+import type { ReviewFile } from "@unvibe/shared";
 
 const version = { mergeBaseSha: "base0", headSha: "head0" };
 const cards = new Set(["n"]);
@@ -37,5 +38,30 @@ describe("threadPlace", () => {
     expect(threadPlace(thread({ kind: "diff-line", fileKey: "a-ts", line: 21 }), cards, version, pathOf)).toEqual({ code: { path: "a.ts", side: "RIGHT", start: 21, end: 21 } });
     expect(threadPlace(thread({ kind: "diff-line", fileKey: "a-ts", line: 8, endLine: 9, side: "LEFT" }), cards, version, pathOf)).toEqual({ code: { path: "a.ts", side: "LEFT", start: 8, end: 9 } });
     expect(threadPlace(thread({ kind: "diff-line", fileKey: "gone", line: 1 }), cards, version, pathOf)).toBeUndefined();
+  });
+});
+
+describe("coversCode", () => {
+  const shown = [{ path: "a.ts", side: "RIGHT" as const, start: 10, end: 20 }];
+  it("is true when a location on the same file and side holds every line", () => {
+    expect(coversCode(shown, { path: "a.ts", side: "RIGHT", start: 12, end: 20 })).toBe(true);
+  });
+  it("is false for lines past a location's ends, another side or another file", () => {
+    expect(coversCode(shown, { path: "a.ts", side: "RIGHT", start: 18, end: 21 })).toBe(false);
+    expect(coversCode(shown, { path: "a.ts", side: "LEFT", start: 12, end: 12 })).toBe(false);
+    expect(coversCode(shown, { path: "b.ts", side: "RIGHT", start: 12, end: 12 })).toBe(false);
+  });
+});
+
+describe("diffShowsLine", () => {
+  const files = [{ path: "a.ts", hunks: [{ lines: [{ oldLine: 4, newLine: 4 }, { oldLine: 5 }, { newLine: 5 }] }] }] as unknown as ReviewFile[];
+  it("finds changed and context lines on their side", () => {
+    expect(diffShowsLine(files, "a.ts", "RIGHT", 4)).toBe(true);
+    expect(diffShowsLine(files, "a.ts", "LEFT", 5)).toBe(true);
+    expect(diffShowsLine(files, "a.ts", "RIGHT", 5)).toBe(true);
+  });
+  it("is false for lines outside every hunk and files not in the diff", () => {
+    expect(diffShowsLine(files, "a.ts", "RIGHT", 40)).toBe(false);
+    expect(diffShowsLine(files, "b.ts", "RIGHT", 4)).toBe(false);
   });
 });

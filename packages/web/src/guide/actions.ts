@@ -65,6 +65,15 @@ export function requestGraphCode(code: GraphCode): void {
 export type GraphCode = { path: string; side: "LEFT" | "RIGHT"; start: number; end: number };
 export type GraphNodeRequest = { nodeId: string } | { code: GraphCode };
 
+/** The lines the shown graph's locations cover (prototype): set by the graph as it's drawn, read by the comments menu. */
+let graphLocations: readonly GraphCode[] = [];
+export function setGraphLocations(locations: readonly GraphCode[]): void {
+  graphLocations = locations;
+}
+export function shownGraphLocations(): readonly GraphCode[] {
+  return graphLocations;
+}
+
 async function resync(reviewId: string): Promise<void> {
   try {
     useReview.getState().setSnapshot(await api.review(reviewId));

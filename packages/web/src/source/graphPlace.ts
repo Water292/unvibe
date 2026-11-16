@@ -3,7 +3,8 @@
  * text is its card's block of the same id; a location's text is the block with the location's id; code is lines on
  * one side, at the merge base for the base side and at the head for the head side.
  */
-import type { ActionAnchor, Thread } from "@unvibe/shared";
+import type { ActionAnchor, ReviewFile, Thread } from "@unvibe/shared";
+import type { GraphCode } from "../guide/actions.js";
 import type { Place } from "@unvibed/viewer";
 import { splitAnchorBlockId } from "../guide/guideUtils.js";
 
@@ -37,4 +38,15 @@ export function threadPlace(thread: Thread, graphCards: ReadonlySet<string>, ver
   const { cardId, block } = splitAnchorBlockId(host.blockId);
   if (!cardId || !graphCards.has(cardId)) return undefined;
   return block === cardId ? { node: cardId } : { node: cardId, location: block };
+}
+
+/** Whether a location among shown covers code's lines: same file and side, from its first line to its last. */
+export function coversCode(shown: readonly GraphCode[], code: GraphCode): boolean {
+  return shown.some((l) => l.path === code.path && l.side === code.side && l.start <= code.start && code.end <= l.end);
+}
+
+/** Whether the diff shows a line of a file on a side: a changed line or a context line of one of its hunks. */
+export function diffShowsLine(files: readonly ReviewFile[], path: string, side: "LEFT" | "RIGHT", line: number): boolean {
+  const file = files.find((f) => f.path === path);
+  return !!file?.hunks.some((h) => h.lines.some((row) => (side === "LEFT" ? row.oldLine : row.newLine) === line));
 }

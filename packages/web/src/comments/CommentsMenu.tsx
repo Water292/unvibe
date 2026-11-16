@@ -37,7 +37,8 @@ import { api, friendlyError } from "../api/client.js";
 import { Icon } from "../components/Icon.js";
 import { toast } from "../floating/Toast.js";
 import { anchorMatchesBlock } from "../guide/guideUtils.js";
-import { requestGraphCode, requestGraphNode, requestGuideBlock, type GraphCode } from "../guide/actions.js";
+import { requestGraphCode, requestGraphNode, requestGuideBlock, shownGraphLocations, type GraphCode } from "../guide/actions.js";
+import { coversCode, diffShowsLine } from "../source/graphPlace.js";
 import { REVEAL_EVENT, ensureDiffVisible } from "../source/diff/revealSource.js";
 import { revealSource } from "../source/reveal.js";
 import { showGuidePane } from "../shell/panes.js";
@@ -607,9 +608,20 @@ export function CommentsMenu({ reviewId }: { reviewId: string }) {
   const localRow = (thread: Thread, withDraft: boolean): React.JSX.Element => {
     const meta = entryMeta(snapshot as ReviewSnapshot, thread);
     const go = (): void => jump(thread);
-    // a thread on code opens where it was made; this opens it in the other view
-    const kind = thread.anchor.host.kind;
-    const other = kind === "diff-line" ? "graph" : kind === "code" ? "diff" : undefined;
+    // a thread on code opens where it was made; this opens it in the other view, greyed out when that view doesn't
+    // show its lines
+    const host = thread.anchor.host;
+    const snap = snapshot as ReviewSnapshot;
+    let other: "graph" | "diff" | undefined;
+    let otherShows = false;
+    if (host.kind === "diff-line") {
+      other = "graph";
+      const path = snap.files.find((f) => f.fileKey === host.fileKey)?.path;
+      otherShows = !!path && coversCode(shownGraphLocations(), { path, side: host.side ?? "RIGHT", start: host.line, end: host.endLine ?? host.line });
+    } else if (host.kind === "code") {
+      other = "diff";
+      otherShows = diffShowsLine(snap.files, host.path, host.commit === snap.version?.mergeBaseSha ? "LEFT" : "RIGHT", host.line);
+    }
     const row = (
       <ListRow
         data-cjump={thread.id}
@@ -625,6 +637,9 @@ export function CommentsMenu({ reviewId }: { reviewId: string }) {
                 className="x"
                 type="button"
                 data-cjump-other={other}
+                disabled={!otherShows}
+                style={otherShows ? undefined : { opacity: 0.4, cursor: "default" }}
+                title={otherShows ? undefined : other === "graph" ? "The graph doesn't show these lines" : "The diff doesn't show this line"}
                 onClick={(e) => {
                   e.stopPropagation();
                   jump(thread, other);

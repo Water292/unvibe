@@ -15,7 +15,7 @@ import { WorkingPlaceholder } from "../components/WorkingPlaceholder.js";
 import { Card } from "../ui/index.js";
 import { explainSelection, selectionActions } from "../floating/SelectionToolbar.js";
 import { toast } from "../floating/Toast.js";
-import { GRAPH_NODE_EVENT, type GraphNodeRequest } from "../guide/actions.js";
+import { GRAPH_NODE_EVENT, setGraphLocations, type GraphNodeRequest } from "../guide/actions.js";
 import { inflightForAnchor, inflightLabel } from "../guide/inflight.js";
 import { useReview } from "../state/store.js";
 import { GraphReview, type Graph, type Place, type ThreadItem, type Threads } from "@unvibed/viewer";
@@ -182,6 +182,13 @@ export function GraphMode({ reviewId, fitKey }: { reviewId: string; fitKey?: str
     };
     window.addEventListener(GRAPH_NODE_EVENT, onRequest);
     return () => window.removeEventListener(GRAPH_NODE_EVENT, onRequest);
+  }, [graph]);
+
+  // the lines the graph shows, for the comments menu to tell whether a thread on code can be opened here
+  useEffect(() => {
+    const locations = (graph?.nodes ?? []).flatMap((n) => n.code.map((l) => ({ path: l.path, side: l.side, start: l.start_line ?? l.line, end: l.line })));
+    setGraphLocations(locations);
+    return () => setGraphLocations([]);
   }, [graph]);
 
   const threads = useMemo((): Threads | undefined => {

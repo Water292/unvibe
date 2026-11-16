@@ -3388,6 +3388,34 @@ export class Pipeline {
     }
   }
 
+  /**
+   * Graph mode (prototype): a session that writes the review's graph. It runs on the review's provider and model with
+   * the review's access, reads the base context first as every base session does, and gets the `graph` MCP role, so
+   * write_graph is its only addition. A fork can't take it: forks share their base session's MCP secret and role.
+   */
+  async graphSession(reviewId: string): Promise<{ prompt(text: string, signal?: AbortSignal): Promise<string>; close(): Promise<void> }> {
+    if (isNoneRunner(this.opts.runner)) throw new NoAgentError();
+    const snapshot = this.opts.reviews.getSnapshot(reviewId);
+    if (!snapshot) throw new Error(`unknown review ${reviewId}`);
+    const settings = await this.effectiveSettings();
+    const lib = loadTemplatesDirSync(this.promptsDir);
+    const instructions = this.instructionsFor(lib, settings);
+    const role = this.roleFor(settings);
+    const mcp = this.opts.mcp.issueSession(reviewId, `graph-${Date.now()}`, "graph");
+    const runner = this.opts.runner;
+    const session = await runner.start({
+      ...roleFields(role),
+      cwd: this.sessionCwd(reviewId),
+      systemPrompt: instructions,
+      readOnly: postureFor(settings) !== "full",
+      mcpServers: [{ name: "unvibe", url: `${this.mcpBaseUrl}${mcp.path}` }],
+    });
+    const prompt = async (text: string, signal?: AbortSignal) =>
+      (await collectTracked(this.opts.sessions, runner, session, text, signal, () => {})).text;
+    await prompt(await this.basePackTextFor(snapshot, instructions, settings));
+    return { prompt, close: () => runner.close(session) };
+  }
+
   updateRunner(): {
     runUpdatePrompt: (
       prompt: string,

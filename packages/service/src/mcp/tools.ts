@@ -135,9 +135,29 @@ export const COMMON_TOOLS: readonly McpToolDef[] = Object.freeze([
 /** Extra tool only the reader session gets (PRD §11.2). */
 export const READER_TOOL: McpToolDef = PIN_CONTEXT;
 
+/**
+ * Graph mode (prototype): the extra tool only a graph-writing session gets. It takes the whole graph and answers with
+ * graph check's report, so the session needs no shell or file writes.
+ */
+export const GRAPH_TOOL: McpToolDef = {
+  name: "write_graph",
+  description:
+    "Save your draft of the review's unvibed graph (graph-writing session only) and get graph check's report on it. " +
+    "Send the whole graph each time. Blank (\"\") ids, schema, and a location's hash with its counts are filled in.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      graph: { type: "object", description: "The whole graph: { schema, nodes, edges }, as the graph format says." },
+    },
+    required: ["graph"],
+    additionalProperties: false,
+  },
+};
+
 /** Full ordered surface for a role; the golden test pins this JSON. */
 export function toolsForRole(role: string): McpToolDef[] {
   if (role === "reader") return [...COMMON_TOOLS, READER_TOOL];
+  if (role === "graph") return [...COMMON_TOOLS, GRAPH_TOOL];
   return [...COMMON_TOOLS];
 }
 

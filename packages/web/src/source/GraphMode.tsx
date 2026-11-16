@@ -5,7 +5,7 @@
  * toolbar's actions, ThreadView / NewThreadComposer (render) and reopen /
  * close (setOpen).
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActionAnchor } from "@unvibe/shared";
 import { api, friendlyError } from "../api/client.js";
 import { NewThreadComposer } from "../comments/NewThreadComposer.js";
@@ -31,18 +31,55 @@ export function GraphMode({ reviewId }: { reviewId: string }) {
   const [explains, setExplains] = useState<{ id: string; at: Place; anchor: ActionAnchor; quote: string }[]>([]);
   const routes = `/api/reviews/${reviewId}/unvibed`;
 
-  useEffect(() => {
-    let current = true;
-    fetch(`${routes}/graph.json`)
-      .then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(await r.text()))))
-      .then((g: Graph) => current && setGraph(g), (e: Error) => current && setError(e.message));
-    return () => {
-      current = false;
-    };
-  }, [routes]);
-
   const base = snapshot?.version?.mergeBaseSha ?? "";
   const head = snapshot?.version?.headSha ?? "";
+  const [writing, setWriting] = useState<"writing" | "failed">();
+  const [attempt, setAttempt] = useState(0);
+  const shownText = useRef("");
+
+  // The graph's state at this head: asking starts the agent when there's no graph, or the head moved since it was
+  // written. A graph that's ready, or still passes graph check while it's updated, is shown; until then, that it's
+  // being written. Asked again every 2 seconds until it's ready.
+  useEffect(() => {
+    let current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ask = async (first: boolean) => {
+      try {
+        const r = await fetch(`${routes}/${first && attempt ? "retry" : "state"}`, { method: first && attempt ? "POST" : "GET" });
+        if (!r.ok) throw new Error(await r.text());
+        const s = (await r.json()) as { state: "ready" | "updating" | "writing" | "failed"; error?: string };
+        if (!current) return;
+        if (s.state === "failed") {
+          setWriting("failed");
+          setError(s.error ?? "The graph couldn't be written.");
+          return;
+        }
+        if (s.state === "writing") {
+          shownText.current = "";
+          setGraph(undefined);
+          setWriting("writing");
+        } else {
+          const g = await fetch(`${routes}/graph.json`);
+          const text = g.ok ? await g.text() : "";
+          // a new graph only when it changed, so asking again while it's updated doesn't redraw it
+          if (current && text && text !== shownText.current) {
+            shownText.current = text;
+            setGraph(JSON.parse(text) as Graph);
+          }
+          setWriting(undefined);
+        }
+        if (s.state !== "ready") timer = setTimeout(() => void ask(false), 2000);
+      } catch (e) {
+        if (current) setError((e as Error).message);
+      }
+    };
+    setError(undefined);
+    void ask(true);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [routes, head, attempt]);
 
   const threads = useMemo((): Threads | undefined => {
     if (!graph || !snapshot) return undefined;
@@ -114,7 +151,23 @@ export function GraphMode({ reviewId }: { reviewId: string }) {
     };
   }, [graph, snapshot, inflight, pending, explains, reviewId, base, head]);
 
-  if (error) return <p className="hint" style={{ padding: 16 }}>{error}</p>;
+  if (error)
+    return (
+      <p className="hint" style={{ padding: 16 }}>
+        {error}{" "}
+        {writing === "failed" && (
+          <button className="x" type="button" onClick={() => setAttempt((n) => n + 1)}>
+            Try again
+          </button>
+        )}
+      </p>
+    );
+  if (writing === "writing")
+    return (
+      <div style={{ padding: 16 }}>
+        <WorkingPlaceholder label="Writing the graph…" />
+      </div>
+    );
   if (!graph || !threads) return null;
   return (
     <div style={{ position: "relative", height: "100%" }} data-graph-mode>

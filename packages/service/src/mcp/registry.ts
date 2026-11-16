@@ -35,7 +35,7 @@ import { findReplyIndexBySeq, parseId } from "@unvibe/shared";
 import type { CommandRunner } from "../exec/runner.js";
 import type { McpReviewData, PinRecord, ReviewReader } from "./read.js";
 import { readCodeSlice } from "./read.js";
-import { READER_TOOL, toolsForRole } from "./tools.js";
+import { GRAPH_TOOL, READER_TOOL, toolsForRole } from "./tools.js";
 import { repoContainingSha } from "../document/resolve.js";
 
 export const MCP_SERVICE_NAME = "unvibe";
@@ -46,8 +46,9 @@ export const MCP_SERVICE_VERSION = "0.0.20";
  *
  * - `reader`: the main reader session (extra `pin_context` tool).
  * - `session`: every other conversation.
+ * - `graph`: a graph-mode session writing the review's graph (extra `write_graph` tool; prototype).
  */
-export type McpRole = "reader" | "session";
+export type McpRole = "reader" | "session" | "graph";
 
 export interface IssuedSession {
   secret: string;
@@ -64,6 +65,9 @@ export interface McpRegistryOptions {
   now?: () => number;
   onPin?: (pin: PinRecord) => void;
 }
+
+/** Graph mode (prototype): saves a review's graph draft and returns graph check's report on it. */
+export type GraphWriter = (reviewId: string, graph: unknown) => Promise<string>;
 
 /** One client connection on a secret: its own server + stateful transport. */
 interface McpConnection {
@@ -105,6 +109,13 @@ export class McpRegistry {
   private unknownHits = 0;
 
   constructor(private readonly opts: McpRegistryOptions) {}
+
+  private graphWriter: GraphWriter | undefined;
+
+  /** Graph mode (prototype): what write_graph calls; set once graph mode's routes are up. */
+  setGraphWriter(writer: GraphWriter): void {
+    this.graphWriter = writer;
+  }
 
   /** Issue a per-session secret; connections are created per client. */
   issueSession(reviewId: string, sessionId: string, role: McpRole): IssuedSession {
@@ -403,6 +414,11 @@ export class McpRegistry {
             String(args["why"] ?? ""),
           ),
         );
+      case GRAPH_TOOL.name:
+        if (state.role !== "graph" || !this.graphWriter) {
+          return errorResult("write_graph is only available to a graph-writing session");
+        }
+        return textResult(await this.graphWriter(state.reviewId, args["graph"]));
       default:
         return errorResult(`unknown tool: ${name}`);
     }

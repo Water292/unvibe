@@ -191,6 +191,9 @@ const needed = [
   "packages/service/dist/adapters/codex.js",
   "packages/web/dist/index.html",
   "packages/web/dist/web-meta.json",
+  // Graph mode (prototype): unvibed's graph format and writing guide, which the service reads at start
+  "packages/service/dist/unvibed/shared/graph.ts",
+  "packages/service/dist/unvibed/docs/writing-graphs.md",
 ];
 for (const f of needed) {
   if (!existsSync(path.join(ROOT, f))) {
@@ -273,6 +276,9 @@ copy("packages/service/dist/update-helper.js", "packages/service/dist/update-hel
 // Tree-sitter grammars (issue #133): plain `.wasm` files the service
 // loads from beside its bundle — shipped verbatim, no install step.
 copy("packages/service/dist/grammars", "packages/service/dist/grammars");
+// Graph mode (prototype): unvibed's graph format and writing guide, copied
+// beside the bundle at build (scripts/copy-unvibed.mjs).
+copy("packages/service/dist/unvibed", "packages/service/dist/unvibed");
 copy("packages/web/dist", "packages/web/dist");
 copy("extension", "extension");
 // Issue #350: stamp the shipped extension's version from the release

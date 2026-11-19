@@ -16,7 +16,7 @@ import { McpRegistry } from "../src/mcp/registry.js";
 import { StoreReviewReader } from "../src/mcp/reviewReader.js";
 import { createApp } from "../src/server.js";
 import { RealCommandRunner } from "../src/exec/index.js";
-import { hashRows } from "../../../../../unvibed-graph/src/hunks.ts";
+import { hashRows } from "unvibed/src/hunks.ts";
 
 const authed = { authorization: "Bearer tok" };
 const reply = (text: string): AgentEvent[] => [

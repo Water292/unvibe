@@ -16,7 +16,7 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "@unvibed/viewer": [
-        "../../../../unvibed-graph/viewer/src/index.ts"
+        "../../node_modules/unvibed/viewer/src/index.ts"
       ]
     }
   },

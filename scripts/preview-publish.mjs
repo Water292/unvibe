@@ -28,6 +28,8 @@
  *   `assertPreviewDeleteRef`). Without `--push` it prints the commands.
  *   Source branches never leave the machine. The throwaway build always
  *   corresponds to commits (never a dirty tree).
+ * - `--remote <name>` pushes (and prunes) on that remote instead of
+ *   `origin`, e.g. a fork; the install command names that remote's repo.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -55,7 +57,7 @@ const rawArgs = process.argv.slice(2).filter((a) => a !== "--");
 if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
   console.log(
     [
-      "usage: mise run preview:publish [-- <branch>] [--push] [--as-is] [--all] [--prune] [--notes-file <file>]",
+      "usage: mise run preview:publish [-- <branch>] [--push] [--as-is] [--all] [--prune] [--notes-file <file>] [--remote <name>]",
       "  <branch>  publish that branch (default: this checkout's branch; --all publishes many)",
       "  default   build main merged with the branch in a throwaway worktree (no worktree needed)",
       "  --as-is   build the branch exactly as it stands (old behaviour)",
@@ -66,6 +68,7 @@ if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
       "            (the throwaway build runs with UNVIBE_DEBUG_TRACES=1; for --as-is in-place builds set it yourself)",
       "  --push    push published preview/<slug> refs; with --prune, delete the listed refs",
       "            locally and on origin (otherwise only prints the commands)",
+      "  --remote <name>  push and prune on that remote instead of origin (e.g. a fork)",
       "  refuses a dirty tree for --as-is builds in place; merged builds come",
       "  from commits only, so a dirty tree can never leak into them;",
       "  never pushes or deletes refs outside preview/*",
@@ -78,11 +81,19 @@ const debug = rawArgs.includes("--debug");
 const asIs = rawArgs.includes("--as-is");
 const all = rawArgs.includes("--all");
 const prune = rawArgs.includes("--prune");
-// #330: --notes-file <path> (value is not a branch name).
+// #330: --notes-file <path> (value is not a branch name). --remote <name> likewise.
 let notesFile = null;
+let remote = "origin";
 const positionalArgs = [];
 for (let i = 0; i < rawArgs.length; i++) {
-  if (rawArgs[i] === "--notes-file") {
+  if (rawArgs[i] === "--remote") {
+    if (!rawArgs[i + 1]) {
+      console.error("preview: --remote needs a remote name");
+      process.exit(2);
+    }
+    remote = rawArgs[i + 1];
+    i++;
+  } else if (rawArgs[i] === "--notes-file") {
     if (!rawArgs[i + 1]) {
       console.error("preview: --notes-file needs a file path");
       process.exit(2);
@@ -211,19 +222,27 @@ function buildAndRelease({ dir, ref, releaseArgs, label, debugBuild }) {
   return localSha;
 }
 
+/** The remote's GitHub repo, owner/name, from its URL (https or ssh). */
+function remoteRepo() {
+  const url = shOrFail("git", ["remote", "get-url", remote], HERE_ROOT);
+  const match = url.match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?\/?$/);
+  if (!match) throwErr(`remote ${remote} (${url}) is not a GitHub repo — cannot name the install command`);
+  return match[1];
+}
+
 /** Push a published ref (opt-in) or print the commands. */
 function pushOrPrint(slug, ref, version, label) {
   const refspec = previewPushRefspec(slug);
   assertPreviewPushRefspec(refspec);
-  const pushCmd = `git push --force origin ${refspec}`;
-  const installCmd = `npm install -g github:indigoviolet/unvibe#${ref}`;
+  const pushCmd = `git push --force ${remote} ${refspec}`;
+  const installCmd = `npm install -g github:${remoteRepo()}#${ref}`;
   if (!doPush) {
     console.log("preview: no push performed (pass --push to push).");
     console.log(`  ${pushCmd}`);
     console.log(`  then on the test machine: ${installCmd}`);
     console.log(`  or step through channels with: unvibe update --list`);
   } else {
-    const pushed = sh("git", ["push", "--force", "origin", refspec], HERE_ROOT, { stdio: "inherit" });
+    const pushed = sh("git", ["push", "--force", remote, refspec], HERE_ROOT, { stdio: "inherit" });
     if (pushed.status !== 0) throwErr(`${label}: git push ${refspec} failed — published locally only`);
     console.log(`preview: pushed ${refspec}`);
     console.log(`preview: install with ${installCmd}`);
@@ -439,7 +458,7 @@ function runPrune() {
     return true;
   }
   if (!doPush) {
-    console.log("preview: dry run — pass --push to delete these locally and on origin:");
+    console.log(`preview: dry run — pass --push to delete these locally and on ${remote}:`);
     for (const s of stale) console.log(`  would delete ${s.ref} (${s.reason})`);
     if (unknown.length > 0) {
       console.log(`preview: kept ${unknown.length} ref(s) with unreadable provenance: ${unknown.join(", ")}`);
@@ -462,13 +481,13 @@ function runPrune() {
       continue;
     }
     console.log(`preview: deleted local ${s.ref} (${s.reason})`);
-    const remote = sh("git", ["push", "origin", "--delete", s.ref], HERE_ROOT);
-    if (remote.status !== 0) {
+    const deleted = sh("git", ["push", remote, "--delete", s.ref], HERE_ROOT);
+    if (deleted.status !== 0) {
       console.error(
-        `preview: local ${s.ref} deleted, but \`git push origin --delete ${s.ref}\` failed (kept going):\n${remote.stderr ?? ""}`.trim(),
+        `preview: local ${s.ref} deleted, but \`git push ${remote} --delete ${s.ref}\` failed (kept going):\n${deleted.stderr ?? ""}`.trim(),
       );
     } else {
-      console.log(`preview: deleted origin ${s.ref}`);
+      console.log(`preview: deleted ${remote} ${s.ref}`);
     }
   }
   return failed === 0;

@@ -5,9 +5,9 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { fillBlanks, graphReport, lostIn, reviewedToKeep, type At } from "../src/routes/unvibed-writer.js";
-import { hashRows } from "../../../../../unvibed-graph/src/hunks.ts";
-import type { Graph } from "../../../../../unvibed-graph/shared/graph.ts";
-import { tempRepo } from "../../../../../unvibed-graph/test/temp-repo.ts";
+import { hashRows } from "unvibed/src/hunks.ts";
+import type { Graph } from "unvibed/shared/graph.ts";
+import { tempRepo } from "unvibed/test/temp-repo.ts";
 
 const lines = (edit: (n: number) => string) => Array.from({ length: 10 }, (_, i) => edit(i + 1)).join("\n") + "\n";
 const repo = tempRepo();

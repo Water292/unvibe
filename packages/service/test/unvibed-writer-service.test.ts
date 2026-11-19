@@ -16,8 +16,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AgentEvent, McpServerConfig, ReviewSnapshot, Session } from "@unvibe/shared";
 import { FakeAgentRunner } from "../src/agent/fake.js";
 import { createApp } from "../src/server.js";
-import { hashRows } from "../../../../../unvibed-graph/src/hunks.ts";
-import type { Graph } from "../../../../../unvibed-graph/shared/graph.ts";
+import { hashRows } from "unvibed/src/hunks.ts";
+import type { Graph } from "unvibed/shared/graph.ts";
 
 const authed = { authorization: "Bearer tok" };
 const done: AgentEvent[] = [

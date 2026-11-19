@@ -19,6 +19,8 @@ import { GRAPH_NODE_EVENT, setGraphLocations, type GraphNodeRequest } from "../g
 import { inflightForAnchor, inflightLabel } from "../guide/inflight.js";
 import { useReview } from "../state/store.js";
 import { GraphReview, type Graph, type Place, type ThreadItem, type Threads } from "@unvibed/viewer";
+// the built viewer's styles (its code boxes, the graph canvas and the diff view it draws with)
+import "unvibed/viewer/dist/style.css";
 import { placeToAnchor, threadPlace } from "./graphPlace.js";
 
 /** The opt-in risk reviewer: off, or on and rating (or waiting for a graph), rated, or failed; ratings by location id. */

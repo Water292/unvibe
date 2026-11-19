@@ -47,7 +47,9 @@ const tracesAlias = tracesOn
       ].map((name) => [name, new URL("./src/traces/stub.ts", import.meta.url).pathname]),
     );
 
-const UNVIBED_VIEWER = process.env.UNVIBED_VIEWER ?? new URL("../../../../unvibed-graph/viewer/src/index.ts", import.meta.url).pathname;
+// unvibed's graph viewer, built (the unvibed package bundles it, with its patched @git-diff-view, into viewer/dist);
+// UNVIBED_VIEWER points it at another build or at a checkout's viewer/src/index.ts.
+const UNVIBED_VIEWER = process.env.UNVIBED_VIEWER ?? "unvibed/viewer/dist/index.js";
 
 export default defineConfig(({ command, mode }) => ({
   plugins: [react(), webMetaPlugin()],
@@ -62,7 +64,7 @@ export default defineConfig(({ command, mode }) => ({
     __UNVIBE_TRACES__: JSON.stringify(tracesOn),
   },
   resolve: {
-    // unvibed's graph viewer, from its checkout (prototype: a path, not a published package); its react imports
+    // unvibed's graph viewer (see UNVIBED_VIEWER); its react imports
     // resolve to this app's React, so there is one React.
     alias: { ...tracesAlias, "@unvibed/viewer": UNVIBED_VIEWER },
     dedupe: ["react", "react-dom"],

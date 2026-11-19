@@ -3,7 +3,7 @@
  * apart from the graph, by location (path, side and hash), so a rated location keeps its rating while its code is
  * unchanged, and the graph the writer made is never touched; the page lays them over the graph it shows.
  */
-import type { Graph, Location, Risk } from "../../../../../../unvibed-graph/shared/graph.ts";
+import type { Graph, Location, Risk } from "unvibed/shared/graph.ts";
 import type { At } from "./unvibed-writer.js";
 
 /** What a review keeps for risk: whether the reviewer turned it on, and every rating, by riskKey. */

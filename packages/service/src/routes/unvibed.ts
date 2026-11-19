@@ -12,6 +12,7 @@
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
@@ -22,27 +23,27 @@ import type { AppContext } from "../app.js";
 import { fillBlanks, graphReport, reviewedToKeep, type At, type Keep, type Reviewed } from "./unvibed-writer.js";
 import { cwdForReview } from "./files.js";
 import { readRatings, riskPrompt, risksById, unrated, type RiskFile } from "./unvibed-risk.js";
-// unvibed's server code, from its checkout beside this one (prototype: no package yet)
-import { cutFor, EMPTY_CUT } from "../../../../../../unvibed-graph/src/hunks.ts";
-import { isRepoFile, show } from "../../../../../../unvibed-graph/src/git.ts";
-import { ReviewStore as MarkStore } from "../../../../../../unvibed-graph/src/review.ts";
-import { check, checkEdgeEnds, checkIds } from "../../../../../../unvibed-graph/src/check.ts";
-import { CodeQuery, MarkRequest } from "../../../../../../unvibed-graph/shared/graph-and-code.ts";
-import type { Graph } from "../../../../../../unvibed-graph/shared/graph.ts";
+// unvibed's server code, from the unvibed package (a build-time dependency: esbuild bundles it into dist)
+import { cutFor, EMPTY_CUT } from "unvibed/src/hunks.ts";
+import { isRepoFile, show } from "unvibed/src/git.ts";
+import { ReviewStore as MarkStore } from "unvibed/src/review.ts";
+import { check, checkEdgeEnds, checkIds } from "unvibed/src/check.ts";
+import { CodeQuery, MarkRequest } from "unvibed/shared/graph-and-code.ts";
+import type { Graph } from "unvibed/shared/graph.ts";
 
 export const GRAPH_PAGE_ID = "graph";
 
-/** The unvibed checkout beside this one: the first folder up from here with an unvibed-graph/ in it. */
+/**
+ * The folder holding unvibed's graph format (shared/graph.ts) and its guide to writing a graph (docs/): UNVIBE_UNVIBED_DIR
+ * when set; else the copy the build puts beside the bundle (dist/unvibed, which is what an install has); else, when
+ * running from source, the unvibed package itself.
+ */
 function findUnvibed(): string {
   const env = process.env.UNVIBE_UNVIBED_DIR;
   if (env) return env;
-  let dir = path.dirname(fileURLToPath(import.meta.url));
-  while (!fs.existsSync(path.join(dir, "unvibed-graph", "shared", "graph.ts"))) {
-    const up = path.dirname(dir);
-    if (up === dir) throw new Error("no unvibed checkout (unvibed-graph/) above the service; set UNVIBE_UNVIBED_DIR");
-    dir = up;
-  }
-  return path.join(dir, "unvibed-graph");
+  const besideBundle = path.join(path.dirname(fileURLToPath(import.meta.url)), "unvibed");
+  if (fs.existsSync(path.join(besideBundle, "shared", "graph.ts"))) return besideBundle;
+  return path.dirname(createRequire(import.meta.url).resolve("unvibed/package.json"));
 }
 
 /** How long one graph job may run, writing and fixing its draft, before it stops: large, as the agent may need many rounds. */

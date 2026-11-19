@@ -5,10 +5,10 @@
  * thread on the graph's text, whose code is still in the change.
  */
 import { randomUUID } from "node:crypto";
-import { checkEdgeEnds, checkGraph, checkIds, diffOf, type NotShown } from "../../../../../../unvibed-graph/src/check.ts";
-import { git, show } from "../../../../../../unvibed-graph/src/git.ts";
-import { getChanges, hashRows, ownRows } from "../../../../../../unvibed-graph/src/hunks.ts";
-import type { Graph, Location } from "../../../../../../unvibed-graph/shared/graph.ts";
+import { checkEdgeEnds, checkGraph, checkIds, diffOf, type NotShown } from "unvibed/src/check.ts";
+import { git, show } from "unvibed/src/git.ts";
+import { getChanges, hashRows, ownRows } from "unvibed/src/hunks.ts";
+import type { Graph, Location } from "unvibed/shared/graph.ts";
 
 /** A review's change: its repo, and the merge base and head it compares. */
 export type At = { repo: string; base: string; head: string };

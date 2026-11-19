@@ -1,0 +1,12 @@
+{
+  "channel": "preview/graph-threads",
+  "version": "0.0.20-preview.graph-threads.90970941",
+  "previousVersion": "0.0.20",
+  "commit": "90970941b64ad16fc13d5356c4996bc6f7a416ab",
+  "previousCommit": "v0.0.20",
+  "dataFormat": 7,
+  "previousDataFormat": 7,
+  "dataResetNeeded": false,
+  "generatedAt": "2026-11-19T02:58:40.022Z",
+  "items": []
+}

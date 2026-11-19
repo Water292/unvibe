@@ -1,0 +1,32 @@
+{
+  "name": "unvibe",
+  "version": "0.0.20-preview.graph-threads.90970941",
+  "description": "Reader for code changes: localhost service + installable web app.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "unvibe": "./packages/service/dist/index.js"
+  },
+  "dependencies": {
+    "fastify": "5.12.7",
+    "@fastify/static": "10.1.7",
+    "@fastify/websocket": "11.3.4",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "immer": "11.1.21",
+    "ws": "8.22.0"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "unvibe": {
+    "channel": "preview/graph-threads",
+    "commit": "90970941b64ad16fc13d5356c4996bc6f7a416ab",
+    "builtAt": "2026-11-19T02:58:39.806Z",
+    "sourceBranch": "graph-threads",
+    "sourceVersion": "0.0.20",
+    "sourceCommit": "90970941b64ad16fc13d5356c4996bc6f7a416ab",
+    "baseBranch": "main",
+    "baseCommit": "b7e3438abc0c015abca2306e66b43b4e4c7f9256",
+    "dataFormat": 7
+  }
+}

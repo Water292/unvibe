@@ -1,0 +1,61 @@
+/** An understanding graph of the code a PR touches, as it stands at the PR's head. */
+export type Graph = {
+  /** Version of shared/graph.ts this graph was written against: `git hash-object shared/graph.ts`. */
+  schema: string;
+  /** Array order is reading order. */
+  nodes: Node[];
+  edges: Edge[];
+};
+
+export type Node = {
+  /** A UUID, unique within the graph. */
+  id: string;
+  /** Short label. */
+  title: string;
+  /** Explanation of what is true about this code; as long as it needs to be. */
+  text: string;
+  code: Location[];
+};
+
+export type Risk = { level: "low" | "medium" | "high"; reason?: string };
+
+/** `to` helps explain `from`. */
+export type Edge = {
+  /** A UUID, unique within the graph. */
+  id: string;
+  /** A node's id. */
+  from: string;
+  /** A node's id. */
+  to: string;
+  note?: string;
+};
+
+/** GitHub's PR review-comment location; field names unchanged. */
+export type Location = {
+  /** A UUID, unique within the graph. */
+  id: string;
+  path: string;
+  /** LEFT = base (deleted code), RIGHT = head. */
+  side: "LEFT" | "RIGHT";
+  /** First line; omit for a single line. */
+  start_line?: number;
+  /** Last line. */
+  line: number;
+  /**
+   * git blob hash of the location's own rows of the diff, joined with "\n", no final newline: lines start_line..line
+   * and the removed or added lines among them, each marked +, - or space, with the whitespace taken out of each row's
+   * text, so re-indenting keeps it. Review marks are made by this hash.
+   */
+  hash: string;
+  /** How many of those rows are added lines. */
+  added: number;
+  /** How many of those rows are removed lines. */
+  removed: number;
+  /** What these lines do, shown above them. */
+  text: string;
+  /**
+   * How risky these lines are, as an AI reviewer judged them, with why. How that reviewer is asked is up to whoever
+   * runs it; unset when no reviewer has looked. A node's risk is its riskiest location's.
+   */
+  risk?: Risk;
+};
